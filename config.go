@@ -11,6 +11,7 @@ var Config = struct {
 	BotName:     "Kami OTP Monitor",
 	OTPChannelIDs: []string{
 		"120363423562861659@newsletter",
+		"120363407230990898@newsletter",
 	},
 	OTPApiURLs: []string{
 		"https://api-kami-nodejs-production-a53d.up.railway.app/api/sms",
