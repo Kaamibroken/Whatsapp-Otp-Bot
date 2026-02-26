@@ -1,4 +1,4 @@
-FROM golang:1.24.13-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 RUN apk add --no-cache gcc musl-dev git sqlite-dev
 
@@ -21,8 +21,6 @@ RUN apk add --no-cache ca-certificates sqlite-libs
 WORKDIR /app
 COPY --from=builder /app/bot .
 
-# Railway کے لیے port expose کرنا ضروری ہے
 EXPOSE 8080
 
-# Railway automatically PORT environment variable set کرتا ہے
 CMD ["./bot"]
