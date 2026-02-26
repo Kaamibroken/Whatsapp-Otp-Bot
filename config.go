@@ -10,7 +10,6 @@ var Config = struct {
 	OwnerNumber: "923556692797",
 	BotName:     "Kami OTP Monitor",
 	OTPChannelIDs: []string{
-		"120363423562861659@newsletter",
 		"120363407230990898@newsletter",
 	},
 	OTPApiURLs: []string{
