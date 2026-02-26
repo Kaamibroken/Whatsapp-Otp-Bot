@@ -143,6 +143,7 @@ var flagMap = map[string]string{
 
 	"pakistan": "🇵🇰",
 	"panama": "🇵🇦",
+	"papua new guinea": "🇵🇬",
 	"paraguay": "🇵🇾",
 	"peru": "🇵🇪",
 	"philippines": "🇵🇭",
