@@ -21,6 +21,8 @@ RUN apk add --no-cache ca-certificates sqlite-libs
 WORKDIR /app
 COPY --from=builder /app/bot .
 
+# Railway کے لیے port expose کرنا ضروری ہے
 EXPOSE 8080
 
+# Railway automatically PORT environment variable set کرتا ہے
 CMD ["./bot"]
