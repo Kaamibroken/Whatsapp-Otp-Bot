@@ -19,6 +19,12 @@ var Config = struct {
 		"https://kami-api-production.up.railway.app/api/roxy?type=sms",
 		"https://kami-api-production.up.railway.app/api/msi?type=sms",
 		"https://kami-api-production.up.railway.app/api/goat?type=sms",
+		"https://kami-api-production.up.railway.app/api/ts?type=sms",
+		"https://kami-api-production.up.railway.app/api/ch?type=sms",
+		"https://kami-api-production.up.railway.app/api/kk?type=sms",
+		"https://kami-api-production.up.railway.app/api/hs?type=sms",
+		"https://kami-api-production.up.railway.app/api/ivs?type=sms",
+		"https://kami-api-production.up.railway.app/api/vc?type=sms",
 	},
-	Interval: 5,
+	Interval: 3, // ✅ 3 sec - faster than before
 }
