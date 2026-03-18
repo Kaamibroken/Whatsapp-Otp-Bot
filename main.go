@@ -53,14 +53,18 @@ var (
 
 // ── MongoDB ──────────────────────────────
 func initMongoDB() {
+	// ✅ Railway auto-detect MongoDB URL
+	uri := os.Getenv("MONGO_URL")
+	if uri == "" { uri = os.Getenv("MONGODB_URL") }
+	if uri == "" { uri = os.Getenv("MONGODB_PRIVATE_URL") }
+	if uri == "" { uri = os.Getenv("MONGODB_URI") }
+	if uri == "" {
+		uri = "mongodb://mongo:AcOOyioCfLYnfygdxtXQUqDXYuykCkoH@mongodb.railway.internal:27017"
+	}
+	fmt.Printf("🍃 MongoDB: %.40s...
+", uri)
 
-
-
-
-
-
-
-
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	mc, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
 	if err != nil {
@@ -187,6 +191,7 @@ func fetchAndProcess(apiURL string, idx int) bool {
 		firstRunMap[apiURL] = false
 		firstRunMapMu.Unlock()
 		fmt.Printf("✅ [API %d] First run: %d msgs marked\n", idx, len(rows))
+
 		return true
 	}
 
@@ -295,88 +300,7 @@ func handlePairAPI(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"Invalid number"}`, 400)
 		return
 	}
-	fmt.Printf("📱 Pair request: %s\n", number)
-
-	if client != nil && client.IsConnected() {
-		client.Disconnect()
-		time.Sleep(2 * time.Second)
-	}
-
-	tmp := whatsmeow.NewClient(container.NewDevice(), waLog.Stdout("Pair", "INFO", true))
-	tmp.AddEventHandler(handler)
-	if err := tmp.Connect(); err != nil {
-		http.Error(w, fmt.Sprintf(`{"error":"Connect failed: %v"}`, err), 500)
-		return
-	}
-	time.Sleep(3 * time.Second)
-
-	code, err := tmp.PairPhone(context.Background(), number, true, whatsmeow.PairClientChrome, "Chrome (Linux)")
-	if err != nil {
-		tmp.Disconnect()
-		http.Error(w, fmt.Sprintf(`{"error":"Pair failed: %v"}`, err), 500)
-		return
-	}
-	fmt.Printf("🔑 Code: %s\n", code)
-
-	go func() {
-		for i := 0; i < 60; i++ {
-			time.Sleep(1 * time.Second)
-			if tmp.Store.ID != nil {
-				fmt.Println("✅ Paired!")
-				client = tmp
-				return
-			}
-		}
-		fmt.Println("⏱️  Pair timeout")
-		tmp.Disconnect()
-	}()
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"success": "true", "code": code, "number": number})
-}
-
-func handleDeleteSession(w http.ResponseWriter, r *http.Request) {
-	if client != nil && client.IsConnected() { client.Disconnect() }
-	devices, _ := container.GetAllDevices(context.Background())
-	for _, d := range devices { _ = d.Delete(context.Background()) }
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"success": "true", "message": "Session deleted"})
-}
-
-// ── MAIN ─────────────────────────────────
-func main() {
-	fmt.Println("🚀 Kami OTP Bot starting...")
-
-	port := os.Getenv("PORT")
-	if port == "" { port = "8080" }
-
-	// HTTP server - pehle start karo
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, "✅ Kami OTP Bot Running")
-	})
-	http.HandleFunc("/link/pair/", handlePairAPI)
-	http.HandleFunc("/link/delete", handleDeleteSession)
-	go func() {
-		fmt.Printf("🌐 Listening on 0.0.0.0:%s\n", port)
-		if err := http.ListenAndServe("0.0.0.0:"+port, nil); err != nil {
-			fmt.Printf("❌ HTTP error: %v\n", err)
-			os.Exit(1)
-		}
-	}()
-
-	initMongoDB()
-
-	dbURL  := strings.TrimSpace(os.Getenv("DATABASE_URL"))
-	dbType := "postgres"
-	if dbURL == "" {
-		dbURL  = "file:kami.db?_foreign_keys=on"
-		dbType = "sqlite3"
-	}
-
-	var err error
-	container, err = sqlstore.New(context.Background(), dbType, dbURL, waLog.Stdout("DB", "INFO", true))
-	if err != nil {
-		fmt.Printf("❌ DB error: %v\n", err)
+%v\n", err)
 	} else {
 		if dev, err := container.GetFirstDevice(context.Background()); err == nil {
 			client = whatsmeow.NewClient(dev, waLog.Stdout("WA", "INFO", true))
