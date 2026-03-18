@@ -44,28 +44,38 @@ var (
 			MaxIdleConns:        100,
 			MaxIdleConnsPerHost: 20,
 			IdleConnTimeout:     30 * time.Second,
-			DisableKeepAlives:   false,
 		},
 	}
 
 	otpRegex = regexp.MustCompile(`\b\d{3,4}[-\s]?\d{3,4}\b|\b\d{4,8}\b`)
 )
 
-// ── MongoDB ──────────────────────────────
+// ── MongoDB ──────────────────────────────────────────────────────────────────
+
 func initMongoDB() {
-	// ✅ Railway auto-detect MongoDB URL
 	uri := os.Getenv("MONGO_URL")
-	if uri == "" { uri = os.Getenv("MONGODB_URL") }
-	if uri == "" { uri = os.Getenv("MONGODB_PRIVATE_URL") }
-	if uri == "" { uri = os.Getenv("MONGODB_URI") }
+	if uri == "" {
+		uri = os.Getenv("MONGODB_URL")
+	}
+	if uri == "" {
+		uri = os.Getenv("MONGODB_PRIVATE_URL")
+	}
+	if uri == "" {
+		uri = os.Getenv("MONGODB_URI")
+	}
 	if uri == "" {
 		uri = "mongodb://mongo:AcOOyioCfLYnfygdxtXQUqDXYuykCkoH@mongodb.railway.internal:27017"
 	}
-	fmt.Printf("🍃 MongoDB: %.40s...
-", uri)
+
+	preview := uri
+	if len(preview) > 40 {
+		preview = preview[:40] + "..."
+	}
+	fmt.Println("MongoDB: " + preview)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+
 	mc, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
 	if err != nil {
 		panic(fmt.Sprintf("MongoDB failed: %v", err))
@@ -75,7 +85,7 @@ func initMongoDB() {
 		Keys:    bson.M{"msg_id": 1},
 		Options: options.Index().SetUnique(true),
 	})
-	fmt.Println("✅ MongoDB connected")
+	fmt.Println("MongoDB connected")
 }
 
 func isAlreadySent(id string) bool {
@@ -108,20 +118,32 @@ func markAsSent(id string) {
 	}()
 }
 
-// ── Helpers ──────────────────────────────
-func extractOTP(msg string) string       { return otpRegex.FindString(msg) }
-func maskPhone(phone string) string {
-	if len(phone) < 6 { return phone }
-	return phone[:3] + "•••" + phone[len(phone)-4:]
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+func extractOTP(msg string) string {
+	return otpRegex.FindString(msg)
 }
+
+func maskPhone(phone string) string {
+	if len(phone) < 6 {
+		return phone
+	}
+	return phone[:3] + "..." + phone[len(phone)-4:]
+}
+
 func cleanCountry(name string) string {
-	if name == "" { return "Unknown" }
+	if name == "" {
+		return "Unknown"
+	}
 	p := strings.Fields(strings.Split(name, "-")[0])
-	if len(p) > 0 { return p[0] }
+	if len(p) > 0 {
+		return strings.Join(p, " ")
+	}
 	return "Unknown"
 }
 
-// ── Send to all channels (parallel) ─────
+// ── Send to all channels parallel ────────────────────────────────────────────
+
 func sendToChannels(msg string) {
 	if client == nil || !client.IsConnected() || !client.IsLoggedIn() {
 		return
@@ -132,7 +154,9 @@ func sendToChannels(msg string) {
 		go func(j string) {
 			defer wg.Done()
 			jid, err := types.ParseJID(j)
-			if err != nil { return }
+			if err != nil {
+				return
+			}
 			_, _ = client.SendMessage(context.Background(), jid, &waProto.Message{
 				Conversation: proto.String(strings.TrimSpace(msg)),
 			})
@@ -141,7 +165,8 @@ func sendToChannels(msg string) {
 	wg.Wait()
 }
 
-// ── Per-API worker ────────────────────────
+// ── Per-API worker ────────────────────────────────────────────────────────────
+
 func startAPIWorker(apiURL string, idx int) {
 	firstRunMapMu.Lock()
 	firstRunMap[apiURL] = true
@@ -166,15 +191,23 @@ func startAPIWorker(apiURL string, idx int) {
 
 func fetchAndProcess(apiURL string, idx int) bool {
 	resp, err := sharedHTTP.Get(apiURL)
-	if err != nil { return false }
+	if err != nil {
+		return false
+	}
 	defer resp.Body.Close()
 
 	var data map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil { return false }
-	if data == nil || data["aaData"] == nil { return true }
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return false
+	}
+	if data == nil || data["aaData"] == nil {
+		return true
+	}
 
 	rows, ok := data["aaData"].([]interface{})
-	if !ok || len(rows) == 0 { return true }
+	if !ok || len(rows) == 0 {
+		return true
+	}
 
 	firstRunMapMu.Lock()
 	isFirst := firstRunMap[apiURL]
@@ -183,22 +216,27 @@ func fetchAndProcess(apiURL string, idx int) bool {
 	if isFirst {
 		for _, row := range rows {
 			r, ok := row.([]interface{})
-			if !ok || len(r) < 3 { continue }
+			if !ok || len(r) < 3 {
+				continue
+			}
 			id := fmt.Sprintf("%v_%v", r[2], r[0])
-			if !isAlreadySent(id) { markAsSent(id) }
+			if !isAlreadySent(id) {
+				markAsSent(id)
+			}
 		}
 		firstRunMapMu.Lock()
 		firstRunMap[apiURL] = false
 		firstRunMapMu.Unlock()
-		fmt.Printf("✅ [API %d] First run: %d msgs marked\n", idx, len(rows))
-
+		fmt.Printf("API %d first run: %d msgs marked\n", idx, len(rows))
 		return true
 	}
 
 	var wg sync.WaitGroup
 	for _, row := range rows {
 		r, ok := row.([]interface{})
-		if !ok || len(r) < 5 { continue }
+		if !ok || len(r) < 5 {
+			continue
+		}
 
 		ts      := fmt.Sprintf("%v", r[0])
 		country := fmt.Sprintf("%v", r[1])
@@ -206,60 +244,75 @@ func fetchAndProcess(apiURL string, idx int) bool {
 		service := fmt.Sprintf("%v", r[3])
 		msg     := fmt.Sprintf("%v", r[4])
 
-		if phone == "0" || phone == "" { continue }
+		if phone == "0" || phone == "" {
+			continue
+		}
 
 		msgID := fmt.Sprintf("%v_%v", phone, ts)
-		if isAlreadySent(msgID) { continue }
-		markAsSent(msgID) // ✅ Mark before goroutine - no duplicate sends
+		if isAlreadySent(msgID) {
+			continue
+		}
+		markAsSent(msgID)
 
 		wg.Add(1)
 		go func(msgID, ts, country, phone, service, msg string) {
 			defer wg.Done()
 
-			cn    := cleanCountry(country)
+			cn := cleanCountry(country)
 			flag, _ := GetCountryWithFlag(cn)
-			otp   := extractOTP(msg)
-			flat  := strings.ReplaceAll(strings.ReplaceAll(msg, "\n", " "), "\r", "")
+			otp := extractOTP(msg)
+			flat := strings.ReplaceAll(strings.ReplaceAll(msg, "\n", " "), "\r", "")
 
-			body := fmt.Sprintf(
-				"✨ *%s | %s Message %d* ⚡\n\n"+
-				"> *Time:* %s\n"+
-				"> *Country:* %s %s\n"+
-				"   *Number:* *%s*\n"+
-				"> *Service:* %s\n"+
-				"   *OTP:* *%s*\n\n"+
-				"> *Join For Numbers:*\n"+
-				"> ¹ https://chat.whatsapp.com/EbaJKbt5J2T6pgENIeFFht\n"+
-				"> ² https://chat.whatsapp.com/L0Qk2ifxRFU3fduGA45osD\n\n"+
-				"*Full Message:*\n%s\n\n"+
-				"> © Developed by Nothing Is Impossible",
-				flag, strings.ToUpper(service), idx,
-				ts, flag, cn, maskPhone(phone),
-				service, otp, flat,
-			)
+			line1 := "✨ *" + flag + " | " + strings.ToUpper(service) + " Message " + fmt.Sprintf("%d", idx) + "* ⚡"
+			line2 := "> *Time:* " + ts
+			line3 := "> *Country:* " + flag + " " + cn
+			line4 := "   *Number:* *" + maskPhone(phone) + "*"
+			line5 := "> *Service:* " + service
+			line6 := "   *OTP:* *" + otp + "*"
+			line7 := "> *Join For Numbers:*"
+			line8 := "> 1 https://chat.whatsapp.com/EbaJKbt5J2T6pgENIeFFht"
+			line9 := "> 2 https://chat.whatsapp.com/L0Qk2ifxRFU3fduGA45osD"
+			line10 := "*Full Message:*"
+			line11 := flat
+			line12 := "> Developed by Nothing Is Impossible"
+
+			body := strings.Join([]string{
+				line1, "",
+				line2, line3, line4,
+				line5, line6, "",
+				line7, line8, line9, "",
+				line10, line11, "",
+				line12,
+			}, "\n")
+
 			sendToChannels(body)
-			fmt.Printf("✅ [API %d] %s %s | %s | OTP: %s\n", idx, flag, cn, maskPhone(phone), otp)
+			fmt.Printf("Sent API %d: %s %s | OTP: %s\n", idx, flag, cn, otp)
 		}(msgID, ts, country, phone, service, msg)
 	}
 	wg.Wait()
 	return true
 }
 
-// ── WhatsApp Events ───────────────────────
+// ── WhatsApp Events ───────────────────────────────────────────────────────────
+
 func handler(evt interface{}) {
 	switch v := evt.(type) {
 	case *events.Message:
-		if !v.Info.IsFromMe { handleIDCommand(v) }
+		if !v.Info.IsFromMe {
+			handleIDCommand(v)
+		}
 	case *events.LoggedOut:
-		fmt.Println("⚠️  WhatsApp logged out!")
+		fmt.Println("WhatsApp logged out!")
 	case *events.Disconnected:
-		fmt.Println("❌ Disconnected, reconnecting...")
+		fmt.Println("Disconnected, reconnecting...")
 		go func() {
 			time.Sleep(3 * time.Second)
-			if client != nil { _ = client.Connect() }
+			if client != nil {
+				_ = client.Connect()
+			}
 		}()
 	case *events.Connected:
-		fmt.Println("✅ WhatsApp connected")
+		fmt.Println("WhatsApp connected")
 	}
 }
 
@@ -268,19 +321,19 @@ func handleIDCommand(evt *events.Message) {
 	if text == "" && evt.Message.ExtendedTextMessage != nil {
 		text = evt.Message.ExtendedTextMessage.GetText()
 	}
-	if strings.TrimSpace(strings.ToLower(text)) != ".id" { return }
+	if strings.TrimSpace(strings.ToLower(text)) != ".id" {
+		return
+	}
 
-	resp := fmt.Sprintf(
-		"👤 *User ID:*\n`%s`\n\n📍 *Chat ID:*\n`%s`",
-		evt.Info.Sender.ToNonAD().String(),
-		evt.Info.Chat.ToNonAD().String(),
-	)
+	resp := "User ID:\n" + evt.Info.Sender.ToNonAD().String() + "\n\nChat ID:\n" + evt.Info.Chat.ToNonAD().String()
+
 	if evt.Message.ExtendedTextMessage != nil &&
 		evt.Message.ExtendedTextMessage.ContextInfo != nil &&
 		evt.Message.ExtendedTextMessage.ContextInfo.Participant != nil {
 		q := strings.Split(*evt.Message.ExtendedTextMessage.ContextInfo.Participant, ":")[0]
-		resp += fmt.Sprintf("\n\n↩️ *Replied ID:*\n`%s`", q)
+		resp += "\n\nReplied ID:\n" + q
 	}
+
 	if client != nil {
 		_, _ = client.SendMessage(context.Background(), evt.Info.Chat, &waProto.Message{
 			Conversation: proto.String(resp),
@@ -288,7 +341,8 @@ func handleIDCommand(evt *events.Message) {
 	}
 }
 
-// ── HTTP Endpoints ────────────────────────
+// ── HTTP Endpoints ────────────────────────────────────────────────────────────
+
 func handlePairAPI(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(r.URL.Path, "/")
 	if len(parts) < 4 {
@@ -300,30 +354,119 @@ func handlePairAPI(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"Invalid number"}`, 400)
 		return
 	}
-%v\n", err)
+	fmt.Println("Pair request: " + number)
+
+	if client != nil && client.IsConnected() {
+		client.Disconnect()
+		time.Sleep(2 * time.Second)
+	}
+
+	tmp := whatsmeow.NewClient(container.NewDevice(), waLog.Stdout("Pair", "INFO", true))
+	tmp.AddEventHandler(handler)
+	if err := tmp.Connect(); err != nil {
+		http.Error(w, `{"error":"Connect failed"}`, 500)
+		return
+	}
+	time.Sleep(3 * time.Second)
+
+	code, err := tmp.PairPhone(context.Background(), number, true, whatsmeow.PairClientChrome, "Chrome (Linux)")
+	if err != nil {
+		tmp.Disconnect()
+		http.Error(w, `{"error":"Pair failed"}`, 500)
+		return
+	}
+	fmt.Println("Pairing code: " + code)
+
+	go func() {
+		for i := 0; i < 60; i++ {
+			time.Sleep(1 * time.Second)
+			if tmp.Store.ID != nil {
+				fmt.Println("Paired successfully!")
+				client = tmp
+				return
+			}
+		}
+		fmt.Println("Pair timeout")
+		tmp.Disconnect()
+	}()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"success": "true", "code": code, "number": number})
+}
+
+func handleDeleteSession(w http.ResponseWriter, r *http.Request) {
+	if client != nil && client.IsConnected() {
+		client.Disconnect()
+	}
+	devices, _ := container.GetAllDevices(context.Background())
+	for _, d := range devices {
+		_ = d.Delete(context.Background())
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"success": "true", "message": "Session deleted"})
+}
+
+// ── MAIN ──────────────────────────────────────────────────────────────────────
+
+func main() {
+	fmt.Println("Kami OTP Bot starting...")
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "Kami OTP Bot Running | /link/pair/NUMBER to pair")
+	})
+	http.HandleFunc("/link/pair/", handlePairAPI)
+	http.HandleFunc("/link/delete", handleDeleteSession)
+
+	go func() {
+		fmt.Println("HTTP server: 0.0.0.0:" + port)
+		if err := http.ListenAndServe("0.0.0.0:"+port, nil); err != nil {
+			fmt.Println("HTTP error: " + err.Error())
+			os.Exit(1)
+		}
+	}()
+
+	initMongoDB()
+
+	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	dbType := "postgres"
+	if dbURL == "" {
+		dbURL = "file:kami.db?_foreign_keys=on"
+		dbType = "sqlite3"
+	}
+
+	var err error
+	container, err = sqlstore.New(context.Background(), dbType, dbURL, waLog.Stdout("DB", "INFO", true))
+	if err != nil {
+		fmt.Println("DB error: " + err.Error())
 	} else {
 		if dev, err := container.GetFirstDevice(context.Background()); err == nil {
 			client = whatsmeow.NewClient(dev, waLog.Stdout("WA", "INFO", true))
 			client.AddEventHandler(handler)
 			if client.Store.ID != nil {
 				if err := client.Connect(); err == nil {
-					fmt.Println("✅ Session restored")
+					fmt.Println("Session restored")
 				}
 			}
 		}
 	}
 
-	// ✅ Start all API workers in parallel
-	fmt.Printf("🔄 Starting %d API workers (interval: %ds)...\n", len(Config.OTPApiURLs), Config.Interval)
+	fmt.Printf("Starting %d API workers...\n", len(Config.OTPApiURLs))
 	for i, url := range Config.OTPApiURLs {
 		go startAPIWorker(url, i+1)
-		time.Sleep(100 * time.Millisecond) // slight stagger
+		time.Sleep(100 * time.Millisecond)
 	}
-	fmt.Println("✅ All workers running!\n")
+	fmt.Println("All workers running!")
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	<-sig
-	fmt.Println("\n🛑 Shutting down...")
-	if client != nil { client.Disconnect() }
+	fmt.Println("Shutting down...")
+	if client != nil {
+		client.Disconnect()
+	}
 }
