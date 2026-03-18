@@ -206,6 +206,12 @@ func fetchAndProcess(apiURL string, idx int) bool {
 
 	rows, ok := data["aaData"].([]interface{})
 	if !ok || len(rows) == 0 {
+		// ✅ FIX: Empty data pe bhi firstRun false karo
+		firstRunMapMu.Lock()
+		if firstRunMap[apiURL] {
+			firstRunMap[apiURL] = false
+		}
+		firstRunMapMu.Unlock()
 		return true
 	}
 
