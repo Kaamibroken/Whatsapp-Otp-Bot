@@ -85,6 +85,8 @@ var flagMap = map[string]string{
 	"israel":                   "🇮🇱",
 	"italy":                    "🇮🇹",
 	"ivory coast":              "🇨🇮",
+	"ivory":                   "🇨🇮",
+	"cote":                    "🇨🇮",
 	"jamaica":                  "🇯🇲",
 	"japan":                    "🇯🇵",
 	"jordan":                   "🇯🇴",
