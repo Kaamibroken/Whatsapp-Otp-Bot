@@ -327,6 +327,11 @@ func handlePairAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Println("Pair request: " + number)
 
+	if container == nil {
+		http.Error(w, `{"error":"Database not ready, try again in a moment"}`, 500)
+		return
+	}
+
 	if client != nil && client.IsConnected() {
 		client.Disconnect()
 		time.Sleep(2 * time.Second)
@@ -419,8 +424,14 @@ func main() {
 	var err error
 	container, err = sqlstore.New(context.Background(), dbType, dbURL, waLog.Stdout("DB", "INFO", true))
 	if err != nil {
-		fmt.Println("DB error: " + err.Error())
-	} else {
+		fmt.Println("Postgres failed, using SQLite: " + err.Error())
+		// Fallback to SQLite
+		container, err = sqlstore.New(context.Background(), "sqlite3", "file:kami.db?_foreign_keys=on", waLog.Stdout("DB", "INFO", true))
+		if err != nil {
+			fmt.Println("SQLite also failed: " + err.Error())
+		}
+	}
+	if container != nil {
 		if dev, err := container.GetFirstDevice(context.Background()); err == nil {
 			client = whatsmeow.NewClient(dev, waLog.Stdout("WA", "INFO", true))
 			client.AddEventHandler(handler)
