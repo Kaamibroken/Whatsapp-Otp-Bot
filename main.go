@@ -217,8 +217,10 @@ func fetchAndProcessWithStatus(apiURL string, idx int) (bool, bool) {
 
 	rows, ok := data["aaData"].([]interface{})
 	if !ok || len(rows) == 0 {
+		fmt.Printf("API %d: empty (0 rows)\n", idx)
 		return false, true // empty, API ok
 	}
+	fmt.Printf("API %d: %d rows found\n", idx, len(rows))
 
 	var wg sync.WaitGroup
 	for _, row := range rows {
