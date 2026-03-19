@@ -166,40 +166,58 @@ func sendToChannels(msg string) {
 
 func startAPIWorker(apiURL string, idx int) {
 	errStreak := 0
+	hasData := false // Track karo is API mein SMS hai ya nahi
+
 	for {
 		if client != nil && client.IsConnected() && client.IsLoggedIn() {
-			if fetchAndProcess(apiURL, idx) {
+			gotData, success := fetchAndProcessWithStatus(apiURL, idx)
+			if success {
 				errStreak = 0
+				hasData = gotData
 			} else {
 				errStreak++
 			}
 		}
-		sleep := time.Duration(Config.Interval) * time.Second
-		if errStreak > 5 {
+
+		var sleep time.Duration
+		if hasData {
+			// ✅ SMS hai - fast polling (3 sec)
+			sleep = time.Duration(Config.Interval) * time.Second
+		} else {
+			// ⏳ SMS nahi - 15 sec baad check karo
 			sleep = 15 * time.Second
+		}
+		if errStreak > 5 {
+			sleep = 30 * time.Second
 		}
 		time.Sleep(sleep)
 	}
 }
 
 func fetchAndProcess(apiURL string, idx int) bool {
+	got, ok := fetchAndProcessWithStatus(apiURL, idx)
+	_ = got
+	return ok
+}
+
+func fetchAndProcessWithStatus(apiURL string, idx int) (bool, bool) {
 	resp, err := sharedHTTP.Get(apiURL)
 	if err != nil {
-		return false
+		return false, false
 	}
 	defer resp.Body.Close()
 
 	var data map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return false
+		return false, false
 	}
 	if data == nil || data["aaData"] == nil {
-		return true
+		return false, true // no data, but API ok
 	}
 
 	rows, ok := data["aaData"].([]interface{})
 	if !ok || len(rows) == 0 {
-		return true
+		return false, true // empty, API ok
 	}
 
 	var wg sync.WaitGroup
@@ -261,7 +279,7 @@ func fetchAndProcess(apiURL string, idx int) bool {
 		}(msgID, ts, country, phone, service, msg)
 	}
 	wg.Wait()
-	return true
+	return true, true // has data
 }
 
 // ── WhatsApp Events ───────────────────────────────────────────────────────────
