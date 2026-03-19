@@ -35,9 +35,6 @@ var (
 	seenCache   = make(map[string]struct{})
 	seenCacheMu sync.RWMutex
 
-	firstRunMap   = make(map[string]bool)
-	firstRunMapMu sync.Mutex
-
 	sharedHTTP = &http.Client{
 		Timeout: 5 * time.Second,
 		Transport: &http.Transport{
@@ -168,10 +165,6 @@ func sendToChannels(msg string) {
 // ── Per-API worker ────────────────────────────────────────────────────────────
 
 func startAPIWorker(apiURL string, idx int) {
-	firstRunMapMu.Lock()
-	firstRunMap[apiURL] = true
-	firstRunMapMu.Unlock()
-
 	errStreak := 0
 	for {
 		if client != nil && client.IsConnected() && client.IsLoggedIn() {
@@ -206,34 +199,6 @@ func fetchAndProcess(apiURL string, idx int) bool {
 
 	rows, ok := data["aaData"].([]interface{})
 	if !ok || len(rows) == 0 {
-		// ✅ FIX: Empty data pe bhi firstRun false karo
-		firstRunMapMu.Lock()
-		if firstRunMap[apiURL] {
-			firstRunMap[apiURL] = false
-		}
-		firstRunMapMu.Unlock()
-		return true
-	}
-
-	firstRunMapMu.Lock()
-	isFirst := firstRunMap[apiURL]
-	firstRunMapMu.Unlock()
-
-	if isFirst {
-		for _, row := range rows {
-			r, ok := row.([]interface{})
-			if !ok || len(r) < 3 {
-				continue
-			}
-			id := fmt.Sprintf("%v_%v", r[2], r[0])
-			if !isAlreadySent(id) {
-				markAsSent(id)
-			}
-		}
-		firstRunMapMu.Lock()
-		firstRunMap[apiURL] = false
-		firstRunMapMu.Unlock()
-		fmt.Printf("API %d first run: %d msgs marked\n", idx, len(rows))
 		return true
 	}
 
@@ -439,11 +404,17 @@ func main() {
 	initMongoDB()
 
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
-	dbType := "postgres"
 	if dbURL == "" {
-		dbURL = "file:kami.db?_foreign_keys=on"
-		dbType = "sqlite3"
+		dbURL = os.Getenv("POSTGRES_URL")
 	}
+	if dbURL == "" {
+		dbURL = os.Getenv("POSTGRESQL_URL")
+	}
+	if dbURL == "" {
+		// Railway PostgreSQL fallback
+		dbURL = "postgresql://postgres:eBkYBnunXyBZlViHGfkztDGHCwMbwnXq@postgres.railway.internal:5432/railway"
+	}
+	dbType := "postgres"
 
 	var err error
 	container, err = sqlstore.New(context.Background(), dbType, dbURL, waLog.Stdout("DB", "INFO", true))
