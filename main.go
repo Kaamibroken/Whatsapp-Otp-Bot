@@ -436,8 +436,8 @@ func main() {
 		dbURL = os.Getenv("POSTGRESQL_URL")
 	}
 	if dbURL == "" {
-		// Railway PostgreSQL fallback
-		dbURL = "postgresql://postgres:eBkYBnunXyBZlViHGfkztDGHCwMbwnXq@postgres.railway.internal:5432/railway"
+		// Railway PostgreSQL public URL
+		dbURL = "postgresql://postgres:eBkYBnunXyBZlViHGfkztDGHCwMbwnXq@shuttle.proxy.rlwy.net:22891/railway"
 	}
 	dbType := "postgres"
 
