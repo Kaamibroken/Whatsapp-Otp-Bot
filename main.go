@@ -164,9 +164,49 @@ func sendToChannels(msg string) {
 
 // ── Per-API worker ────────────────────────────────────────────────────────────
 
+func firstRunMark(apiURL string, idx int) {
+	resp, err := sharedHTTP.Get(apiURL)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	var data map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return
+	}
+	if data == nil || data["aaData"] == nil {
+		return
+	}
+	rows, ok := data["aaData"].([]interface{})
+	if !ok {
+		return
+	}
+	count := 0
+	for _, row := range rows {
+		r, ok := row.([]interface{})
+		if !ok || len(r) < 3 {
+			continue
+		}
+		phone := fmt.Sprintf("%v", r[2])
+		ts    := fmt.Sprintf("%v", r[0])
+		msgID := fmt.Sprintf("%v_%v", phone, ts)
+		if !isAlreadySent(msgID) {
+			markAsSent(msgID)
+			count++
+		}
+	}
+	fmt.Printf("API %d: marked %d existing msgs\n", idx, count)
+}
+
 func startAPIWorker(apiURL string, idx int) {
 	errStreak := 0
-	hasData := false // Track karo is API mein SMS hai ya nahi
+	hasData := false
+
+	// ✅ First run: sab existing messages mark karo, send mat karo
+	fmt.Printf("API %d: first run marking...\n", idx)
+	firstRunMark(apiURL, idx)
+	fmt.Printf("API %d: ready!\n", idx)
 
 	for {
 		if client != nil && client.IsConnected() && client.IsLoggedIn() {
