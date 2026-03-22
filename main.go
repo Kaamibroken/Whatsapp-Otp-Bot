@@ -125,11 +125,7 @@ func maskPhone(phone string) string {
 	if len(phone) < 6 {
 		return phone
 	}
-	// Show first 4 + hide middle + show last 4
-	if len(phone) <= 8 {
-		return phone[:2] + "••••" + phone[len(phone)-2:]
-	}
-	return phone[:4] + "•••••" + phone[len(phone)-4:]
+	return phone[:4] + "•••" + phone[len(phone)-4:]
 }
 
 func cleanCountry(name string) string {
