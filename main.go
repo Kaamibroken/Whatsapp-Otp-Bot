@@ -125,7 +125,11 @@ func maskPhone(phone string) string {
 	if len(phone) < 6 {
 		return phone
 	}
-	return phone[:3] + "..." + phone[len(phone)-4:]
+	// Show first 4 + hide middle + show last 4
+	if len(phone) <= 8 {
+		return phone[:2] + "••••" + phone[len(phone)-2:]
+	}
+	return phone[:4] + "•••••" + phone[len(phone)-4:]
 }
 
 func cleanCountry(name string) string {
@@ -249,8 +253,13 @@ func fetchAndProcessWithStatus(apiURL string, idx int) (bool, bool) {
 		go func(msgID, ts, country, phone, service, msg string) {
 			defer wg.Done()
 
-			cn := cleanCountry(country)
-			flag, _ := GetCountryWithFlag(cn)
+			// Phone number se country detect karo (accurate)
+			cn, flag := GetCountryFromPhone(phone)
+			if cn == "Unknown" {
+				// Fallback: API ke country field se try karo
+				cn = cleanCountry(country)
+				flag, _ = GetCountryWithFlag(cn)
+			}
 			otp := extractOTP(msg)
 			flat := strings.ReplaceAll(strings.ReplaceAll(msg, "\n", " "), "\r", "")
 
